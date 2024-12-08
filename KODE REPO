@@ -1,0 +1,87 @@
+#include <Servo.h>             // Library untuk mengendalikan servo 
+#include <Wire.h>              // Library untuk komunikasi I2C
+#include <LiquidCrystal_I2C.h> // Library untuk LCD I2C
+
+int water;  // Variabel untuk status sensor kelembaban tanah
+Servo statusServo;  // Membuat objek servo
+
+// Pin untuk relay dan sensor
+int relayPompaTanah = 3;  // Output pin untuk relay pertama (pompa tanah)
+int relayPompaAir = 4;    // Output pin untuk relay kedua (pompa air)
+int sensorTanah = 6;      // Input pin untuk sensor kelembaban tanah
+int trigPin = 7;          // Pin Trigger untuk sensor ultrasonik
+int echoPin = 8;          // Pin Echo untuk sensor ultrasonik
+
+// Inisialisasi LCD (Alamat I2C adalah 0x27, bisa berbeda tergantung modul)
+LiquidCrystal_I2C lcd(0x27, 16, 2);  // 16x2 LCD
+
+void setup() {
+  Serial.begin(9600);  // Inisialisasi komunikasi serial pada 9600 baud
+  pinMode(relayPompaTanah, OUTPUT);  // Output pin untuk relay pompa tanah
+  pinMode(relayPompaAir, OUTPUT);    // Output pin untuk relay pompa air
+  pinMode(sensorTanah, INPUT);       // Input pin untuk sensor kelembaban tanah
+  pinMode(trigPin, OUTPUT);          // Pin Trigger sebagai OUTPUT
+  pinMode(echoPin, INPUT);           // Pin Echo sebagai INPUT
+  
+  statusServo.attach(9);             // Menghubungkan servo ke pin 9
+  statusServo.write(180);              // Servo berada pada posisi awal (0 derajat, sistem mati)
+
+  // Mematikan kedua pompa saat inisialisasi
+  digitalWrite(relayPompaTanah, LOW); 
+  digitalWrite(relayPompaAir, LOW);
+
+  // Inisialisasi LCD
+  lcd.begin(16, 2);  // Mengatur LCD untuk 16 karakter dan 2 baris
+  lcd.backlight();    // Menyalakan backlight LCD
+}
+
+void loop() {
+  // Membaca status dari sensor kelembaban tanah
+  water = digitalRead(sensorTanah);
+
+  // Mengukur jarak menggunakan sensor ultrasonik
+  long duration, distance;
+  digitalWrite(trigPin, LOW); 
+  delayMicroseconds(2);  
+  digitalWrite(trigPin, HIGH); 
+  delayMicroseconds(10);  // Memberikan pulsa 10ms
+  digitalWrite(trigPin, LOW); 
+
+  // Mengukur durasi sinyal Echo
+  duration = pulseIn(echoPin, HIGH);
+
+  // Menghitung jarak berdasarkan waktu perjalanan pulsa suara (dalam cm)
+  distance = duration * 0.0344 / 2;  // Rumus: jarak = (waktu * kecepatan suara) / 2
+
+  // Menampilkan jarak pada Serial Monitor
+  Serial.print("Jarak Air: ");
+  Serial.print(distance);  // Menampilkan jarak dalam cm
+  Serial.println(" cm");
+
+  // Menampilkan status kelembaban tanah pada LCD
+  lcd.clear();  // Membersihkan layar LCD
+
+  if (water == LOW) {  // Jika tanah kering
+    lcd.setCursor(0, 0);  // Posisi kursor di baris 1, kolom 1
+    lcd.print("Status: Lembab");
+    digitalWrite(relayPompaTanah, HIGH);  // Menghidupkan pompa tanah
+    
+  } else {  // Jika tanah lembab
+    lcd.setCursor(0, 0);  // Posisi kursor di baris 1, kolom 1
+    lcd.print("Status: Kering");
+    digitalWrite(relayPompaTanah, LOW);  // Mematikan pompa tanah
+    statusServo.write(0);   // Servo kembali ke posisi awal (0 derajat, sistem mati)
+  }
+
+  // Mengontrol pompa air berdasarkan sensor ultrasonik
+  if (distance <= 21) {  // Jika jarak air kurang dari atau sama dengan 4 cm, matikan pompa air
+    digitalWrite(relayPompaAir, HIGH);  // Mematikan pompa air
+    statusServo.write(0);  // Servo bergerak ke 90 derajat, menandakan sistem hidup
+  } else {  // Jika jarak lebih dari 4 cm, hidupkan pompa air
+    digitalWrite(relayPompaAir, LOW);  // Menghidupkan pompa air
+    statusServo.write(100);   // Servo kembali ke posisi awal (0 derajat, sistem mati)
+    
+  }
+
+  delay(200);  // Menunggu 400ms sebelum membaca ulang
+}
